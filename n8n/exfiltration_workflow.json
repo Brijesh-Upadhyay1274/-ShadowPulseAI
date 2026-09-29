@@ -1,0 +1,96 @@
+{
+  "name": "ShadowPulse — Data Exfiltration → Executive Notification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zeek-exfiltration",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "d1111111-1111-4111-8111-111111111111",
+      "name": "Exfiltration Alert Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "shadowpulse-exfil"
+    },
+    {
+      "parameters": {
+        "jsCode": "const alert = $input.first().json.body;\nconst srcIp = alert.data?.srcip || 'unknown';\nconst dstIp = alert.data?.dstip || 'unknown';\nconst bytesTransferred = parseInt(alert.data?.orig_bytes || '0');\nconst mbTransferred = (bytesTransferred / (1024 * 1024)).toFixed(2);\n\nconst isCritical = bytesTransferred > 10000000; // > 10MB\n\nconst notification = {\n  incident_id: `INC-EXFIL-${Date.now()}`,\n  title: `DATA EXFILTRATION ALERT: ${mbTransferred} MB transferred`,\n  severity: isCritical ? 'CRITICAL' : 'HIGH',\n  confidence: isCritical ? 92 : 75,\n  source_ip: srcIp,\n  destination_ip: dstIp,\n  destination_port: alert.data?.dstport || '443',\n  bytes_transferred: bytesTransferred,\n  mb_transferred: parseFloat(mbTransferred),\n  mitre_technique: 'T1048 - Exfiltration Over Alternative Protocol',\n  kill_chain_phase: 'Exfiltration',\n  timestamp: new Date().toISOString(),\n  executive_summary: `Anomalous outbound data transfer of ${mbTransferred} MB detected from internal host ${srcIp} to external destination ${dstIp}. Transfer exceeds baseline by ${(bytesTransferred / 1000000 * 100 / 5).toFixed(0)}%. Immediate investigation recommended.`,\n  recommended_actions: [\n    'Isolate source host from network',\n    'Capture forensic memory image',\n    'Block destination IP at perimeter firewall',\n    'Initiate incident response procedure',\n    'Notify CISO and data protection officer'\n  ],\n  evidence: [\n    `Outbound transfer: ${mbTransferred} MB`,\n    `Asymmetric ratio: orig_bytes >> resp_bytes`,\n    `Destination: ${dstIp} (not in approved destinations)`,\n    `Transfer occurred outside business hours`,\n    `Connection duration: ${alert.data?.duration || 'unknown'}s`\n  ]\n};\n\nreturn [{ json: notification }];"
+      },
+      "id": "d2222222-2222-4222-8222-222222222222",
+      "name": "Assess Exfiltration Impact",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "cond-critical",
+              "leftValue": "={{ $json.severity }}",
+              "rightValue": "CRITICAL",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d3333333-3333-4333-8333-333333333333",
+      "name": "Is Critical Exfil?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/api/alerts/ingest",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"event\": \"CRITICAL_EXFILTRATION\",\n  \"priority\": \"P1\",\n  \"notification_target\": \"EXECUTIVE_TEAM\",\n  \"data\": {{ JSON.stringify($json) }}\n}",
+        "options": {}
+      },
+      "id": "d4444444-4444-4444-8444-444444444444",
+      "name": "Executive Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/api/alerts/ingest",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "d5555555-5555-4555-8555-555555555555",
+      "name": "Standard Alert Storage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 400]
+    }
+  ],
+  "connections": {
+    "Exfiltration Alert Webhook": {
+      "main": [[ { "node": "Assess Exfiltration Impact", "type": "main", "index": 0 } ]]
+    },
+    "Assess Exfiltration Impact": {
+      "main": [[ { "node": "Is Critical Exfil?", "type": "main", "index": 0 } ]]
+    },
+    "Is Critical Exfil?": {
+      "main": [
+        [{ "node": "Executive Notification", "type": "main", "index": 0 }],
+        [{ "node": "Standard Alert Storage", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "ShadowPulse" }, { "name": "Exfiltration" }, { "name": "Executive" }]
+}

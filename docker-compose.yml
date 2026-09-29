@@ -1,0 +1,145 @@
+# ShadowPulse AI — Docker Compose Orchestration
+# Deploys: FastAPI Backend, React Frontend, Zeek, Wazuh, n8n
+# For Linux/Mac deployment (not required for Windows demo)
+
+services:
+  # ============================================
+  # FastAPI Backend (Detection Engines)
+  # ============================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../Dockerfile.backend
+    container_name: shadowpulse-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data:/app/data
+    environment:
+      - SHADOWPULSE_ENV=production
+      - DATA_DIR=/app/data
+    networks:
+      - shadowpulse-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # React Frontend (Executive Dashboard)
+  # ============================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../Dockerfile.frontend
+    container_name: shadowpulse-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - shadowpulse-net
+    restart: unless-stopped
+
+  # ============================================
+  # Zeek Network Monitor (Passive TAP)
+  # ============================================
+  zeek:
+    image: zeek/zeek:latest
+    container_name: shadowpulse-zeek
+    network_mode: host
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    volumes:
+      - ./zeek/local.zeek:/opt/zeek/share/zeek/site/local.zeek
+      - ./zeek/ja3.zeek:/opt/zeek/share/zeek/site/ja3.zeek
+      - zeek-logs:/opt/zeek/logs
+    command: >
+      zeek -i af_packet::eth0
+      /opt/zeek/share/zeek/site/local.zeek
+    restart: unless-stopped
+
+  # ============================================
+  # Wazuh Manager (SIEM & Alert Engine)
+  # ============================================
+  wazuh-manager:
+    image: wazuh/wazuh-manager:4.9.2
+    container_name: shadowpulse-wazuh
+    ports:
+      - "1514:1514/udp"
+      - "1515:1515"
+      - "55000:55000"
+    volumes:
+      - ./wazuh/rules/shadowpulse_rules.xml:/var/ossec/etc/rules/local_rules.xml
+      - ./wazuh/decoders/zeek_decoder.xml:/var/ossec/etc/decoders/local_decoder.xml
+      - zeek-logs:/var/ossec/logs/zeek:ro
+      - wazuh-data:/var/ossec/data
+    environment:
+      - WAZUH_MANAGER_CONFIG=yes
+    networks:
+      - shadowpulse-net
+    restart: unless-stopped
+
+  # ============================================
+  # Wazuh Indexer (OpenSearch)
+  # ============================================
+  wazuh-indexer:
+    image: wazuh/wazuh-indexer:4.9.2
+    container_name: shadowpulse-indexer
+    ports:
+      - "9200:9200"
+    environment:
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "discovery.type=single-node"
+      - "plugins.security.disabled=true"
+    volumes:
+      - indexer-data:/var/lib/wazuh-indexer
+    networks:
+      - shadowpulse-net
+    restart: unless-stopped
+
+  # ============================================
+  # n8n Workflow Automation
+  # ============================================
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: shadowpulse-n8n
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n-data:/home/node/.n8n
+      - ./n8n:/home/node/workflows
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=shadowpulse
+      - N8N_BASIC_AUTH_PASSWORD=ntro_secure_2026
+      - WEBHOOK_URL=http://localhost:5678
+    networks:
+      - shadowpulse-net
+    restart: unless-stopped
+
+# ============================================
+# Persistent Volumes
+# ============================================
+volumes:
+  zeek-logs:
+    driver: local
+  wazuh-data:
+    driver: local
+  indexer-data:
+    driver: local
+  n8n-data:
+    driver: local
+
+# ============================================
+# Network
+# ============================================
+networks:
+  shadowpulse-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

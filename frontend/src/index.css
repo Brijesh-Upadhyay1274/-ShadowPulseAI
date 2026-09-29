@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+@theme {
+  --color-abyss: #060913;
+  --color-navy: #0B1020;
+  --color-navy-light: #121A30;
+  --color-border: rgba(0, 229, 255, 0.12);
+  --color-threat-critical: #FF3B30;
+  --color-threat-high: #FFA726;
+  --color-threat-medium: #FFD600;
+  --color-threat-low: #00E5FF;
+  --color-threat-safe: #00E676;
+  --color-accent: #00E5FF;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+body {
+  background-color: #060913;
+  color: #E2E8F0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  margin: 0;
+  overflow-x: hidden;
+}
+
+/* Custom Tactical Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0B1020; }
+::-webkit-scrollbar-thumb { background: #1E293B; border-radius: 3px; border: 1px solid rgba(0,229,255,0.1); }
+::-webkit-scrollbar-thumb:hover { background: #00E5FF44; }
+
+/* Military Glassmorphism */
+.glass {
+  background: rgba(11, 16, 32, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 229, 255, 0.15);
+}
+
+.glass-card {
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 229, 255, 0.1);
+  box-shadow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.05), 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.glass-card:hover {
+  border-color: rgba(0, 229, 255, 0.25);
+}
+
+/* Cyber Glow Utilities */
+.glow-cyan {
+  box-shadow: 0 0 20px rgba(0, 229, 255, 0.35);
+}
+
+.glow-red {
+  box-shadow: 0 0 20px rgba(255, 59, 48, 0.4);
+}
+
+.glow-orange {
+  box-shadow: 0 0 20px rgba(255, 167, 38, 0.35);
+}
+
+.text-glow-cyan {
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.6);
+}
+
+.text-glow-red {
+  text-shadow: 0 0 10px rgba(255, 59, 48, 0.7);
+}
+
+/* Tactical Background Grid */
+.bg-grid-cyber {
+  background-image: 
+    linear-gradient(to right, rgba(0, 229, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 229, 255, 0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Pulse animation for live indicators */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 4px currentColor); }
+  50% { opacity: 0.5; filter: drop-shadow(0 0 14px currentColor); }
+}
+.animate-pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+
+@keyframes radar-sweep {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+.animate-radar { animation: radar-sweep 4s linear infinite; }

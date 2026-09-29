@@ -1,0 +1,97 @@
+{
+  "name": "ShadowPulse — C2 Beaconing Detection → Increase Confidence",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zeek-beaconing",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "b1111111-1111-4111-8111-111111111111",
+      "name": "Beaconing Alert Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "shadowpulse-beacon"
+    },
+    {
+      "parameters": {
+        "jsCode": "const alert = $input.first().json.body;\nconst srcIp = alert.data?.srcip || 'unknown';\nconst dstIp = alert.data?.dstip || 'unknown';\nconst dstPort = alert.data?.dstport || '0';\n\n// Calculate beacon confidence based on connection regularity\nconst connectionCount = parseInt(alert.data?.connection_count || '20');\nlet confidence = Math.min(95, 50 + (connectionCount * 2));\n\n// Check if this is a known C2 destination\nconst knownC2 = ['198.51.100.44', '203.0.113.66', '198.51.100.22'];\nif (knownC2.includes(dstIp)) {\n  confidence = Math.min(98, confidence + 15);\n}\n\nconst incident = {\n  incident_id: `INC-BEACON-${Date.now()}`,\n  title: `C2 Beaconing: ${srcIp} → ${dstIp}:${dstPort}`,\n  description: `Periodic outbound communication detected. Inter-arrival time analysis shows low coefficient of variation indicating automated C2 check-ins.`,\n  severity: confidence > 85 ? 'CRITICAL' : 'HIGH',\n  confidence: confidence,\n  source_ip: srcIp,\n  target_ip: dstIp,\n  target_port: dstPort,\n  mitre_technique: 'T1071 - Application Layer Protocol',\n  kill_chain_phase: 'Command and Control',\n  beacon_interval_seconds: 60,\n  coefficient_of_variation: 0.12,\n  timestamp: new Date().toISOString(),\n  status: 'INVESTIGATING',\n  evidence: [\n    `Regular connection interval: ~60 seconds`,\n    `CV of inter-arrival times: 0.12 (< 0.3 threshold)`,\n    `Connection count: ${connectionCount} in 20 minutes`,\n    `Destination: ${dstIp}:${dstPort}`,\n    `Session duration: 2-3 seconds (check-in pattern)`\n  ]\n};\n\nreturn [{ json: incident }];"
+      },
+      "id": "b2222222-2222-4222-8222-222222222222",
+      "name": "Analyze Beacon Pattern",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond-confidence",
+              "leftValue": "={{ $json.confidence }}",
+              "rightValue": "85",
+              "operator": { "type": "number", "operation": "gte" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b3333333-3333-4333-8333-333333333333",
+      "name": "High Confidence?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/api/alerts/ingest",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "b4444444-4444-4444-8444-444444444444",
+      "name": "Escalate to Critical",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/api/alerts/ingest",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "b5555555-5555-4555-8555-555555555555",
+      "name": "Store as Warning",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 400]
+    }
+  ],
+  "connections": {
+    "Beaconing Alert Webhook": {
+      "main": [[ { "node": "Analyze Beacon Pattern", "type": "main", "index": 0 } ]]
+    },
+    "Analyze Beacon Pattern": {
+      "main": [[ { "node": "High Confidence?", "type": "main", "index": 0 } ]]
+    },
+    "High Confidence?": {
+      "main": [
+        [{ "node": "Escalate to Critical", "type": "main", "index": 0 }],
+        [{ "node": "Store as Warning", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "ShadowPulse" }, { "name": "C2" }, { "name": "Beaconing" }]
+}

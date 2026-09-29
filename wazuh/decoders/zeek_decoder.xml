@@ -1,0 +1,82 @@
+<!--
+  ShadowPulse AI — Wazuh Decoders for Zeek Network Logs
+  Problem Statement: SIH 26145 — AI-Based Detection of Cyber Threats in Unidirectional IP Traffic
+  
+  Installation: Copy to /var/ossec/etc/decoders/local_decoder.xml
+  Supports: conn.log, dns.log, ssl.log (TSV and JSON formats)
+-->
+
+<!-- ============================================== -->
+<!-- Base Parent Decoder for Zeek TSV Logs          -->
+<!-- ============================================== -->
+<decoder name="zeek">
+  <prematch>^\d+\.\d+\t\w</prematch>
+</decoder>
+
+<!-- Base Parent Decoder for Zeek JSON Logs -->
+<decoder name="zeek-json">
+  <prematch>^{"</prematch>
+  <plugin_decoder>JSON_Decoder</plugin_decoder>
+</decoder>
+
+<!-- ============================================== -->
+<!-- conn.log Decoder                               -->
+<!-- Fields: ts, uid, orig_h, orig_p, resp_h,       -->
+<!--   resp_p, proto, service, duration,            -->
+<!--   orig_bytes, resp_bytes, conn_state           -->
+<!-- ============================================== -->
+<decoder name="zeek-conn">
+  <parent>zeek</parent>
+  <regex>^(\S+)\t(\S+)\t(\S+)\t(\d+)\t(\S+)\t(\d+)\t(\w+)\t(\S+)\t(\S+)\t(\S+)\t(\S+)\t(\w+)</regex>
+  <order>timestamp, uid, srcip, srcport, dstip, dstport, proto, service, duration, orig_bytes, resp_bytes, conn_state</order>
+</decoder>
+
+<!-- ============================================== -->
+<!-- dns.log Decoder                                -->
+<!-- Identifies DNS logs by port 53 presence        -->
+<!-- Fields: ts, uid, orig_h, orig_p, resp_h,       -->
+<!--   resp_p, proto, trans_id, rtt, query,         -->
+<!--   qtype_name, rcode_name                       -->
+<!-- ============================================== -->
+<decoder name="zeek-dns">
+  <parent>zeek</parent>
+  <prematch>\t53\t</prematch>
+  <regex>^(\S+)\t(\S+)\t(\S+)\t(\d+)\t(\S+)\t53\t(\w+)\t(\d+)\t(\S+)\t(\S+)\t\d+\t\S+\t\d+\t(\S+)\t\d+\t(\S+)</regex>
+  <order>timestamp, uid, srcip, srcport, dstip, proto, trans_id, rtt, query, qtype_name, rcode_name</order>
+</decoder>
+
+<!-- ============================================== -->
+<!-- ssl.log Decoder                                -->
+<!-- Identifies SSL logs by TLS version string      -->
+<!-- Fields: ts, uid, orig_h, orig_p, resp_h,       -->
+<!--   resp_p, version, cipher, server_name,        -->
+<!--   established, ja3, ja3s                       -->
+<!-- ============================================== -->
+<decoder name="zeek-ssl">
+  <parent>zeek</parent>
+  <prematch>\tTLS</prematch>
+  <regex>^(\S+)\t(\S+)\t(\S+)\t(\d+)\t(\S+)\t(\d+)\t(\S+)\t(\S+)\t\S+\t(\S+)\t\S+\t\S+\t\S+\t(\S+)\t\S+\t\S+\t\S+\t\S+\t([a-fA-F0-9]{32})\t([a-fA-F0-9]{32})</regex>
+  <order>timestamp, uid, srcip, srcport, dstip, dstport, ssl_version, ssl_cipher, server_name, ssl_established, ja3, ja3s</order>
+</decoder>
+
+<!-- ============================================== -->
+<!-- Zeek JSON Format Decoders (Alternative)        -->
+<!-- When Zeek outputs JSON via json-logs.zeek      -->
+<!-- ============================================== -->
+<decoder name="zeek-json-conn">
+  <parent>zeek-json</parent>
+  <prematch>"id.orig_h":</prematch>
+  <plugin_decoder>JSON_Decoder</plugin_decoder>
+</decoder>
+
+<decoder name="zeek-json-dns">
+  <parent>zeek-json</parent>
+  <prematch>"query":</prematch>
+  <plugin_decoder>JSON_Decoder</plugin_decoder>
+</decoder>
+
+<decoder name="zeek-json-ssl">
+  <parent>zeek-json</parent>
+  <prematch>"ja3":</prematch>
+  <plugin_decoder>JSON_Decoder</plugin_decoder>
+</decoder>

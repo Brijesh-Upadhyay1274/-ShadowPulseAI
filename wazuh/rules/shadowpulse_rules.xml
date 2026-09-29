@@ -1,0 +1,438 @@
+<!--
+  ShadowPulse AI — Custom Wazuh Detection Rules for Zeek Network Logs
+  Problem Statement: SIH 26145 — AI-Based Detection of Cyber Threats in Unidirectional IP Traffic (NTRO)
+  
+  Rule ID Range: 100500 - 100599
+  Installation: Copy to /var/ossec/etc/rules/local_rules.xml
+  
+  MITRE ATT&CK Mapping:
+    T1046  - Network Service Scanning
+    T1595  - Active Scanning
+    T1110  - Brute Force
+    T1071  - Application Layer Protocol
+    T1573  - Encrypted Channel
+    T1568  - Dynamic Resolution (DGA)
+    T1572  - Protocol Tunneling
+    T1048  - Exfiltration Over Alternative Protocol
+    T1041  - Exfiltration Over C2 Channel
+    T1090  - Proxy / Domain Fronting
+    T1030  - Data Transfer Size Limits
+    T1499  - Endpoint Denial of Service
+-->
+
+<group name="shadowpulse,zeek,network,threat_hunting,">
+
+  <!-- ============================================== -->
+  <!-- BASE RULES — Zeek Log Ingestion               -->
+  <!-- ============================================== -->
+  
+  <rule id="100500" level="0">
+    <decoded_as>zeek-conn</decoded_as>
+    <description>ShadowPulse: Zeek connection event ingested</description>
+    <group>zeek_conn,</group>
+  </rule>
+
+  <rule id="100501" level="0">
+    <decoded_as>zeek-dns</decoded_as>
+    <description>ShadowPulse: Zeek DNS event ingested</description>
+    <group>zeek_dns,</group>
+  </rule>
+
+  <rule id="100502" level="0">
+    <decoded_as>zeek-ssl</decoded_as>
+    <description>ShadowPulse: Zeek SSL/TLS event ingested</description>
+    <group>zeek_ssl,</group>
+  </rule>
+
+  <!-- ============================================== -->
+  <!-- MODULE 1: RECONNAISSANCE & PORT SCANNING       -->
+  <!-- ============================================== -->
+
+  <!-- TCP Port Scan — Multiple Rejected Connections -->
+  <rule id="100510" level="10" frequency="25" timeframe="60">
+    <if_matched_sid>100500</if_matched_sid>
+    <field name="conn_state">^(REJ|S0|RSTR)$</field>
+    <same_srcip />
+    <description>ShadowPulse RECON: TCP Port Scan detected — $(srcip) generated 25+ rejected connections in 60s</description>
+    <mitre>
+      <id>T1046</id>
+    </mitre>
+    <group>reconnaissance,portscan,</group>
+  </rule>
+
+  <!-- Host Sweep — Single Port Across Multiple Targets -->
+  <rule id="100511" level="9" frequency="10" timeframe="120">
+    <if_matched_sid>100500</if_matched_sid>
+    <field name="conn_state">^(S0|REJ)$</field>
+    <same_srcip />
+    <different_dstip />
+    <description>ShadowPulse RECON: Host Sweep detected — $(srcip) scanning port $(dstport) across multiple targets</description>
+    <mitre>
+      <id>T1595</id>
+    </mitre>
+    <group>reconnaissance,hostsweep,</group>
+  </rule>
+
+  <!-- Slow Reconnaissance — Low-rate scanning over extended period -->
+  <rule id="100512" level="7" frequency="15" timeframe="3600">
+    <if_matched_sid>100500</if_matched_sid>
+    <field name="conn_state">^(S0|REJ|RSTR)$</field>
+    <same_srcip />
+    <description>ShadowPulse RECON: Slow Reconnaissance detected — $(srcip) low-rate scanning over 1 hour</description>
+    <mitre>
+      <id>T1046</id>
+    </mitre>
+    <group>reconnaissance,slow_scan,</group>
+  </rule>
+
+  <!-- ============================================== -->
+  <!-- MODULE 2: BRUTE FORCE & CONNECTION FLOODING    -->
+  <!-- ============================================== -->
+
+  <!-- SSH Brute Force -->
+  <rule id="100515" level="12" frequency="15" timeframe="60">
+    <if_matched_sid>100500</if_matched_sid>
+    <field name="dstport">^22$</field>
+    <same_srcip />
+    <same_dstip />
+    <description>ShadowPulse BRUTE: SSH Brute Force — $(srcip) → $(dstip):22 (15+ attempts in 60s)</description>
+    <mitre>
+      <id>T1110</id>
+    </mitre>
+    <group>brute_force,ssh,</group>
+  </rule>
+
+  <!-- RDP Brute Force -->
+  <rule id="100516" level="12" frequency="10" timeframe="60">
+    <if_matched_sid>100500</if_matched_sid>
+    <field name="dstport">^3389$</field>
+    <same_srcip />
+    <same_dstip />
+    <description>ShadowPulse BRUTE: RDP Brute Force — $(srcip) → $(dstip):3389 (10+ attempts in 60s)</description>
+    <mitre>
+      <id>T1110</id>
+    </mitre>
+    <group>brute_force,rdp,</group>
+  </rule>
+
+  <!-- SMB Connection Flooding -->
+  <rule id="100517" level="11" frequency="20" timeframe="60">
+    <if_matched_sid>100500</if_matched_sid>
+    <field name="dstport">^445$</field>
+    <same_srcip />
+    <description>ShadowPulse BRUTE: SMB Connection Flood — $(srcip) → port 445 (20+ attempts in 60s)</description>
+    <mitre>
+      <id>T1110</id>
+    </mitre>
+    <group>brute_force,smb,</group>
+  </rule>
+
+  <!-- ============================================== -->
+  <!-- MODULE 3: C2 BEACONING DETECTION               -->
+  <!-- ============================================== -->
+
+  <!-- Periodic Outbound Communication (Beacon Indicator) -->
+  <rule id="100520" level="10" frequency="20" timeframe="1200">
+    <if_matched_sid>100500</if_matched_sid>
+    <field name="proto">^tcp$</field>
+    <same_srcip />
+    <same_dstip />
+    <description>ShadowPulse C2: Periodic beaconing suspected — $(srcip) → $(dstip):$(dstport) (20+ regular connections in 20 min)</description>
+    <mitre>
+      <id>T1071</id>
+      <id>T1573</id>
+    </mitre>
+    <group>c2,beaconing,</group>
+  </rule>
+
+  <!-- Outbound to Suspicious High Port -->
+  <rule id="100521" level="8">
+    <if_matched_sid>100500</if_matched_sid>
+    <field name="dstport" type="pcre2">^(4444|5555|6666|7777|8888|9999|1337|31337)$</field>
+    <description>ShadowPulse C2: Outbound connection to suspicious port $(dstport) — $(srcip) → $(dstip)</description>
+    <mitre>
+      <id>T1571</id>
+    </mitre>
+    <group>c2,suspicious_port,</group>
+  </rule>
+
+  <!-- ============================================== -->
+  <!-- MODULE 4: DGA DOMAIN DETECTION                 -->
+  <!-- ============================================== -->
+
+  <!-- Suspicious TLD Queries -->
+  <rule id="100525" level="8">
+    <if_matched_sid>100501</if_matched_sid>
+    <field name="query" type="pcre2">(?i)\.(top|xyz|cc|tk|pw|biz|club|work|click|gq|ml|ga|cf)$</field>
+    <description>ShadowPulse DGA: DNS query to high-risk TLD — $(query) from $(srcip)</description>
+    <mitre>
+      <id>T1568.002</id>
+    </mitre>
+    <group>dga,dns_abuse,</group>
+  </rule>
+
+  <!-- High-Entropy Domain (Likely DGA) -->
+  <rule id="100526" level="10">
+    <if_matched_sid>100501</if_matched_sid>
+    <field name="query" type="pcre2">^[a-z0-9]{15,}\.</field>
+    <field name="rcode_name">^NXDOMAIN$</field>
+    <description>ShadowPulse DGA: High-entropy domain with NXDOMAIN response — $(query) from $(srcip)</description>
+    <mitre>
+      <id>T1568.002</id>
+    </mitre>
+    <group>dga,dns_abuse,</group>
+  </rule>
+
+  <!-- Multiple NXDOMAIN Responses (DGA Indicator) -->
+  <rule id="100527" level="11" frequency="10" timeframe="120">
+    <if_matched_sid>100526</if_matched_sid>
+    <same_srcip />
+    <description>ShadowPulse DGA: Multiple NXDOMAIN responses from $(srcip) — likely DGA activity (10+ in 2 min)</description>
+    <mitre>
+      <id>T1568.002</id>
+    </mitre>
+    <group>dga,dns_abuse,</group>
+  </rule>
+
+  <!-- ============================================== -->
+  <!-- MODULE 5: DNS TUNNELING DETECTION              -->
+  <!-- ============================================== -->
+
+  <!-- Long DNS Subdomain (Tunneling Indicator) -->
+  <rule id="100530" level="10">
+    <if_matched_sid>100501</if_matched_sid>
+    <field name="query" type="pcre2">^[a-zA-Z0-9_-]{40,}\.</field>
+    <description>ShadowPulse TUNNEL: Abnormally long DNS query detected — $(query) from $(srcip)</description>
+    <mitre>
+      <id>T1572</id>
+      <id>T1071.004</id>
+    </mitre>
+    <group>dns_tunneling,</group>
+  </rule>
+
+  <!-- TXT Record Abuse -->
+  <rule id="100531" level="9">
+    <if_matched_sid>100501</if_matched_sid>
+    <field name="qtype_name">^TXT$</field>
+    <field name="query" type="pcre2">^[a-zA-Z0-9+/=]{20,}\.</field>
+    <description>ShadowPulse TUNNEL: Suspicious TXT query with encoded data — $(query) from $(srcip)</description>
+    <mitre>
+      <id>T1572</id>
+    </mitre>
+    <group>dns_tunneling,txt_abuse,</group>
+  </rule>
+
+  <!-- High-Frequency DNS Tunneling -->
+  <rule id="100532" level="12" frequency="30" timeframe="60">
+    <if_matched_sid>100530</if_matched_sid>
+    <same_srcip />
+    <description>ShadowPulse TUNNEL: High-frequency DNS tunneling confirmed — $(srcip) generating 30+ long queries in 60s</description>
+    <mitre>
+      <id>T1572</id>
+    </mitre>
+    <group>dns_tunneling,confirmed,</group>
+  </rule>
+
+  <!-- ============================================== -->
+  <!-- MODULE 6: DNS FLOOD DETECTION                  -->
+  <!-- ============================================== -->
+
+  <!-- DNS Query Flood -->
+  <rule id="100535" level="10" frequency="100" timeframe="60">
+    <if_matched_sid>100501</if_matched_sid>
+    <same_srcip />
+    <description>ShadowPulse FLOOD: DNS Query Flood — $(srcip) sent 100+ DNS queries in 60 seconds</description>
+    <mitre>
+      <id>T1499</id>
+    </mitre>
+    <group>dns_flood,dos,</group>
+  </rule>
+
+  <!-- DNS Amplification (Response >> Query) -->
+  <rule id="100536" level="11">
+    <if_matched_sid>100501</if_matched_sid>
+    <field name="qtype_name">^ANY$</field>
+    <description>ShadowPulse FLOOD: DNS ANY query (amplification vector) — $(srcip) → $(dstip)</description>
+    <mitre>
+      <id>T1499</id>
+    </mitre>
+    <group>dns_flood,amplification,</group>
+  </rule>
+
+  <!-- ============================================== -->
+  <!-- MODULE 7: TLS/QUIC ANOMALY DETECTION           -->
+  <!-- ============================================== -->
+
+  <!-- Known Malicious JA3 Fingerprint -->
+  <rule id="100540" level="14">
+    <if_matched_sid>100502</if_matched_sid>
+    <field name="ja3" type="pcre2">^(72a589da586844d7f0818ce684948eea|a0e9f5d64349fb13191bc781f81f42e1|b384078a50301557cc769f64d7fbac3a|e7d705a3286e19ea42f587b344ee6865|6734f37431670b3ab4292b8f60f29984|51c64c77e60f3980eea90869b68c58a8|bd0bf25947d4a37404f0424edf4db9ad)$</field>
+    <description>ShadowPulse MALWARE: Known malicious JA3 fingerprint detected — $(ja3) from $(srcip) → $(dstip):$(dstport)</description>
+    <mitre>
+      <id>T1573.002</id>
+      <id>T1071.001</id>
+    </mitre>
+    <group>malware,ja3,encrypted_threat,</group>
+  </rule>
+
+  <!-- TLS SNI Mismatch (Domain Fronting) -->
+  <rule id="100541" level="9">
+    <if_matched_sid>100502</if_matched_sid>
+    <field name="ssl_established">^T$</field>
+    <field name="sni_matches">^F$</field>
+    <description>ShadowPulse TLS: SNI mismatch detected — Server Name $(server_name) does not match certificate. Possible domain fronting from $(srcip)</description>
+    <mitre>
+      <id>T1090.004</id>
+    </mitre>
+    <group>domain_fronting,tls_anomaly,</group>
+  </rule>
+
+  <!-- Weak/Deprecated Cipher Suite -->
+  <rule id="100542" level="7">
+    <if_matched_sid>100502</if_matched_sid>
+    <field name="ssl_cipher" type="pcre2">(RC4|DES|NULL|EXPORT|anon)</field>
+    <description>ShadowPulse TLS: Deprecated cipher suite detected — $(ssl_cipher) from $(srcip) → $(dstip)</description>
+    <mitre>
+      <id>T1573</id>
+    </mitre>
+    <group>tls_anomaly,weak_cipher,</group>
+  </rule>
+
+  <!-- Self-Signed Certificate Indicator -->
+  <rule id="100543" level="8">
+    <if_matched_sid>100502</if_matched_sid>
+    <field name="ssl_established">^T$</field>
+    <field name="sni_matches">^F$</field>
+    <field name="server_name" type="pcre2">^\d+\.\d+\.\d+\.\d+$</field>
+    <description>ShadowPulse TLS: Connection to IP-based server with cert mismatch — possible self-signed cert at $(dstip)</description>
+    <mitre>
+      <id>T1573.002</id>
+    </mitre>
+    <group>tls_anomaly,self_signed,</group>
+  </rule>
+
+  <!-- ============================================== -->
+  <!-- MODULE 8: DATA EXFILTRATION DETECTION          -->
+  <!-- ============================================== -->
+
+  <!-- Large Outbound Transfer -->
+  <rule id="100550" level="10">
+    <if_matched_sid>100500</if_matched_sid>
+    <field name="orig_bytes" type="pcre2">^\d{8,}$</field>
+    <description>ShadowPulse EXFIL: Large outbound transfer detected — $(orig_bytes) bytes from $(srcip) → $(dstip):$(dstport)</description>
+    <mitre>
+      <id>T1048</id>
+    </mitre>
+    <group>exfiltration,large_transfer,</group>
+  </rule>
+
+  <!-- Exfiltration Over Non-Standard Port -->
+  <rule id="100551" level="11">
+    <if_matched_sid>100550</if_matched_sid>
+    <field name="dstport" type="pcre2">^(?!443|80|8080|8443)\d+$</field>
+    <description>ShadowPulse EXFIL: Large transfer over non-standard port — $(orig_bytes) bytes from $(srcip) → $(dstip):$(dstport)</description>
+    <mitre>
+      <id>T1048.001</id>
+    </mitre>
+    <group>exfiltration,non_standard_port,</group>
+  </rule>
+
+  <!-- Sustained Exfiltration Pattern -->
+  <rule id="100552" level="13" frequency="5" timeframe="300">
+    <if_matched_sid>100550</if_matched_sid>
+    <same_srcip />
+    <same_dstip />
+    <description>ShadowPulse EXFIL: Sustained exfiltration pattern — $(srcip) → $(dstip) (5+ large transfers in 5 min)</description>
+    <mitre>
+      <id>T1041</id>
+      <id>T1030</id>
+    </mitre>
+    <group>exfiltration,sustained,</group>
+  </rule>
+
+  <!-- ============================================== -->
+  <!-- MODULE 9: IP SPOOFING DETECTION                -->
+  <!-- ============================================== -->
+
+  <!-- Impossible Source Address (RFC 1918 from External) -->
+  <rule id="100555" level="9">
+    <if_matched_sid>100500</if_matched_sid>
+    <field name="srcip" type="pcre2">^(0\.0\.0\.0|255\.255\.255\.255|127\.)</field>
+    <description>ShadowPulse SPOOF: Impossible source address detected — $(srcip) → $(dstip)</description>
+    <mitre>
+      <id>T1090</id>
+    </mitre>
+    <group>spoofing,impossible_source,</group>
+  </rule>
+
+  <!-- ============================================== -->
+  <!-- MODULE 10: GENERAL NETWORK ANOMALIES           -->
+  <!-- ============================================== -->
+
+  <!-- Unusual Protocol on Standard Port -->
+  <rule id="100560" level="6">
+    <if_matched_sid>100500</if_matched_sid>
+    <field name="dstport">^(80|443)$</field>
+    <field name="service" type="pcre2">^(?!http|ssl|dns|-)</field>
+    <description>ShadowPulse ANOMALY: Non-standard service on port $(dstport) — $(service) from $(srcip) → $(dstip)</description>
+    <mitre>
+      <id>T1571</id>
+    </mitre>
+    <group>anomaly,protocol_mismatch,</group>
+  </rule>
+
+  <!-- Long-Duration Connection (Persistent Channel) -->
+  <rule id="100561" level="7">
+    <if_matched_sid>100500</if_matched_sid>
+    <field name="duration" type="pcre2">^\d{4,}</field>
+    <description>ShadowPulse ANOMALY: Long-duration connection ($(duration)s) — $(srcip) → $(dstip):$(dstport)</description>
+    <mitre>
+      <id>T1071</id>
+    </mitre>
+    <group>anomaly,long_connection,</group>
+  </rule>
+
+  <!-- ============================================== -->
+  <!-- COMPOSITE RULES — Attack Chain Correlation     -->
+  <!-- ============================================== -->
+
+  <!-- Recon + C2 = Escalated Threat -->
+  <rule id="100570" level="13">
+    <if_matched_sid>100520</if_matched_sid>
+    <same_srcip />
+    <if_matched_sid>100510</if_matched_sid>
+    <description>ShadowPulse CHAIN: Reconnaissance followed by C2 beaconing from same source $(srcip) — active threat</description>
+    <mitre>
+      <id>T1046</id>
+      <id>T1071</id>
+    </mitre>
+    <group>attack_chain,escalated,</group>
+  </rule>
+
+  <!-- DNS Abuse + Exfiltration = Critical Incident -->
+  <rule id="100571" level="14">
+    <if_matched_sid>100530</if_matched_sid>
+    <same_srcip />
+    <if_matched_sid>100550</if_matched_sid>
+    <description>ShadowPulse CHAIN: DNS Tunneling combined with Data Exfiltration from $(srcip) — CRITICAL INCIDENT</description>
+    <mitre>
+      <id>T1572</id>
+      <id>T1041</id>
+    </mitre>
+    <group>attack_chain,critical,</group>
+  </rule>
+
+  <!-- JA3 Match + Large Transfer = Malware Exfiltration -->
+  <rule id="100572" level="15">
+    <if_matched_sid>100540</if_matched_sid>
+    <same_srcip />
+    <if_matched_sid>100550</if_matched_sid>
+    <description>ShadowPulse CHAIN: Malware communication + data exfiltration — $(srcip) using known malicious TLS fingerprint</description>
+    <mitre>
+      <id>T1573.002</id>
+      <id>T1041</id>
+    </mitre>
+    <group>attack_chain,malware_exfil,critical,</group>
+  </rule>
+
+</group>

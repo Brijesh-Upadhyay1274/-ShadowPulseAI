@@ -1,0 +1,82 @@
+{
+  "name": "ShadowPulse — DNS Tunnel + JA3 Match → Merge Attack Chain",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zeek-dns-tunnel",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "c1111111-1111-4111-8111-111111111111",
+      "name": "DNS Alert Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "shadowpulse-dns-tunnel"
+    },
+    {
+      "parameters": {
+        "jsCode": "const alert = $input.first().json.body;\nconst ruleId = alert.rule?.id || '';\nconst srcIp = alert.data?.srcip || 'unknown';\n\n// Determine alert type\nlet alertType = 'unknown';\nif (['100530', '100531', '100532'].includes(ruleId)) alertType = 'dns_tunneling';\nif (['100525', '100526', '100527'].includes(ruleId)) alertType = 'dga';\nif (['100535', '100536'].includes(ruleId)) alertType = 'dns_flood';\n\nreturn [{\n  json: {\n    alert_type: alertType,\n    source_ip: srcIp,\n    rule_id: ruleId,\n    query: alert.data?.query || '',\n    timestamp: new Date().toISOString(),\n    raw_alert: alert\n  }\n}];"
+      },
+      "id": "c2222222-2222-4222-8222-222222222222",
+      "name": "Classify DNS Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=http://localhost:8000/api/alerts?source_ip={{ $json.source_ip }}&engine=encrypted_traffic",
+        "options": {}
+      },
+      "id": "c3333333-3333-4333-8333-333333333333",
+      "name": "Check JA3 Alerts for Same IP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const dnsAlert = $('Classify DNS Alert').first().json;\nconst ja3Alerts = $input.first().json;\n\nconst hasJA3Match = Array.isArray(ja3Alerts) && ja3Alerts.length > 0;\n\nif (hasJA3Match) {\n  // Merge into attack chain\n  return [{\n    json: {\n      action: 'MERGE_ATTACK_CHAIN',\n      chain_id: `CHAIN-${Date.now()}`,\n      title: `Multi-Vector Attack: DNS Abuse + Encrypted Malware from ${dnsAlert.source_ip}`,\n      severity: 'CRITICAL',\n      confidence: 94,\n      source_ip: dnsAlert.source_ip,\n      steps: [\n        {\n          phase: 'DNS Abuse',\n          type: dnsAlert.alert_type,\n          mitre: 'T1572',\n          evidence: `DNS query: ${dnsAlert.query}`\n        },\n        {\n          phase: 'Encrypted C2',\n          type: 'ja3_match',\n          mitre: 'T1573.002',\n          evidence: `Malicious JA3 fingerprint from same source IP`\n        }\n      ],\n      kill_chain_phases: ['Command and Control'],\n      timestamp: new Date().toISOString()\n    }\n  }];\n} else {\n  return [{\n    json: {\n      action: 'STANDALONE_ALERT',\n      title: `DNS ${dnsAlert.alert_type} from ${dnsAlert.source_ip}`,\n      severity: 'HIGH',\n      confidence: 72,\n      source_ip: dnsAlert.source_ip,\n      timestamp: new Date().toISOString()\n    }\n  }];\n}"
+      },
+      "id": "c4444444-4444-4444-8444-444444444444",
+      "name": "Correlate DNS + JA3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/api/alerts/ingest",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "c5555555-5555-4555-8555-555555555555",
+      "name": "Store Correlated Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "DNS Alert Webhook": {
+      "main": [[ { "node": "Classify DNS Alert", "type": "main", "index": 0 } ]]
+    },
+    "Classify DNS Alert": {
+      "main": [[ { "node": "Check JA3 Alerts for Same IP", "type": "main", "index": 0 } ]]
+    },
+    "Check JA3 Alerts for Same IP": {
+      "main": [[ { "node": "Correlate DNS + JA3", "type": "main", "index": 0 } ]]
+    },
+    "Correlate DNS + JA3": {
+      "main": [[ { "node": "Store Correlated Alert", "type": "main", "index": 0 } ]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "ShadowPulse" }, { "name": "DNS" }, { "name": "Correlation" }]
+}

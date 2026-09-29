@@ -1,0 +1,92 @@
+{
+  "name": "ShadowPulse — Multi-Alert Aggregation → Generate Threat DNA",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 5 }] }
+      },
+      "id": "e1111111-1111-4111-8111-111111111111",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://localhost:8000/api/alerts?limit=100",
+        "options": {}
+      },
+      "id": "e2222222-2222-4222-8222-222222222222",
+      "name": "Fetch Recent Alerts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const alerts = $input.first().json;\nif (!Array.isArray(alerts) || alerts.length === 0) {\n  return [{ json: { skip: true } }];\n}\n\n// Group alerts by source IP\nconst grouped = {};\nfor (const alert of alerts) {\n  const ip = alert.source_ip || 'unknown';\n  if (!grouped[ip]) grouped[ip] = [];\n  grouped[ip].push(alert);\n}\n\nconst dnaProfiles = [];\n\nfor (const [ip, ipAlerts] of Object.entries(grouped)) {\n  if (ipAlerts.length < 2) continue;\n  \n  // Calculate Threat DNA scores per category\n  const categories = {\n    recon: ['reconnaissance', 'port_scan', 'host_sweep', 'brute_force'],\n    c2: ['c2_beaconing', 'abnormal_outbound', 'suspicious_port'],\n    dns_abuse: ['dga', 'dns_tunneling', 'dns_flood'],\n    encrypted: ['ja3_anomaly', 'tls_anomaly', 'encrypted_malware'],\n    exfiltration: ['data_exfiltration', 'large_transfer', 'asymmetric_traffic']\n  };\n\n  const scores = {};\n  for (const [category, types] of Object.entries(categories)) {\n    const matching = ipAlerts.filter(a => types.some(t => (a.alert_type || '').includes(t) || (a.category || '').includes(t)));\n    const maxConfidence = matching.length > 0 ? Math.max(...matching.map(a => a.confidence || 50)) : 0;\n    const frequency = Math.min(100, matching.length * 15);\n    scores[category] = Math.round((maxConfidence * 0.6 + frequency * 0.4));\n  }\n\n  dnaProfiles.push({\n    incident_id: `DNA-${ip.replace(/\\./g, '-')}-${Date.now()}`,\n    source_ip: ip,\n    alert_count: ipAlerts.length,\n    recon_score: scores.recon,\n    c2_score: scores.c2,\n    dns_abuse_score: scores.dns_abuse,\n    encrypted_traffic_score: scores.encrypted,\n    exfiltration_score: scores.exfiltration,\n    overall_threat_level: Object.values(scores).reduce((a, b) => a + b, 0) / 5,\n    generated_at: new Date().toISOString()\n  });\n}\n\nif (dnaProfiles.length === 0) {\n  return [{ json: { skip: true } }];\n}\n\nreturn dnaProfiles.map(d => ({ json: d }));"
+      },
+      "id": "e3333333-3333-4333-8333-333333333333",
+      "name": "Compute Threat DNA Profiles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "cond-skip",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "notTrue" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e4444444-4444-4444-8444-444444444444",
+      "name": "Has DNA Profiles?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/api/analytics/threat-dna/ingest",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "e5555555-5555-4555-8555-555555555555",
+      "name": "Store Threat DNA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 200]
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes": {
+      "main": [[ { "node": "Fetch Recent Alerts", "type": "main", "index": 0 } ]]
+    },
+    "Fetch Recent Alerts": {
+      "main": [[ { "node": "Compute Threat DNA Profiles", "type": "main", "index": 0 } ]]
+    },
+    "Compute Threat DNA Profiles": {
+      "main": [[ { "node": "Has DNA Profiles?", "type": "main", "index": 0 } ]]
+    },
+    "Has DNA Profiles?": {
+      "main": [
+        [{ "node": "Store Threat DNA", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "ShadowPulse" }, { "name": "ThreatDNA" }, { "name": "Aggregation" }]
+}

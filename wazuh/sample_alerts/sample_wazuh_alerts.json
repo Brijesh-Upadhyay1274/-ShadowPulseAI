@@ -1,0 +1,213 @@
+[
+  {
+    "timestamp": "2026-09-28T09:14:22.000Z",
+    "rule": {
+      "id": "100510",
+      "level": 10,
+      "description": "ShadowPulse RECON: TCP Port Scan detected — 192.168.1.100 generated 25+ rejected connections in 60s",
+      "groups": ["shadowpulse", "zeek", "reconnaissance", "portscan"],
+      "mitre": { "id": ["T1046"], "tactic": ["Discovery"], "technique": ["Network Service Scanning"] }
+    },
+    "agent": { "id": "001", "name": "zeek-sensor-01", "ip": "10.0.0.100" },
+    "data": {
+      "srcip": "192.168.1.100",
+      "dstip": "10.0.0.5",
+      "dstport": "22",
+      "proto": "tcp",
+      "conn_state": "REJ",
+      "orig_bytes": "0",
+      "resp_bytes": "0"
+    },
+    "decoder": { "name": "zeek-conn" },
+    "full_log": "1727510062.123456\tCxYz123\t192.168.1.100\t45678\t10.0.0.5\t22\ttcp\t-\t0.001\t0\t0\tREJ\tT\tF\t0\tSr\t1\t44\t1\t40\t-"
+  },
+  {
+    "timestamp": "2026-09-28T09:18:45.000Z",
+    "rule": {
+      "id": "100515",
+      "level": 12,
+      "description": "ShadowPulse BRUTE: SSH Brute Force — 172.16.0.99 → 10.0.0.10:22 (15+ attempts in 60s)",
+      "groups": ["shadowpulse", "zeek", "brute_force", "ssh"],
+      "mitre": { "id": ["T1110"], "tactic": ["Credential Access"], "technique": ["Brute Force"] }
+    },
+    "agent": { "id": "001", "name": "zeek-sensor-01", "ip": "10.0.0.100" },
+    "data": {
+      "srcip": "172.16.0.99",
+      "dstip": "10.0.0.10",
+      "dstport": "22",
+      "proto": "tcp",
+      "conn_state": "RSTR",
+      "duration": "0.5",
+      "orig_bytes": "320",
+      "resp_bytes": "180"
+    },
+    "decoder": { "name": "zeek-conn" }
+  },
+  {
+    "timestamp": "2026-09-28T09:22:10.000Z",
+    "rule": {
+      "id": "100520",
+      "level": 10,
+      "description": "ShadowPulse C2: Periodic beaconing suspected — 10.0.1.50 → 198.51.100.44:8443 (20+ regular connections in 20 min)",
+      "groups": ["shadowpulse", "zeek", "c2", "beaconing"],
+      "mitre": { "id": ["T1071", "T1573"], "tactic": ["Command and Control"], "technique": ["Application Layer Protocol", "Encrypted Channel"] }
+    },
+    "agent": { "id": "001", "name": "zeek-sensor-01", "ip": "10.0.0.100" },
+    "data": {
+      "srcip": "10.0.1.50",
+      "dstip": "198.51.100.44",
+      "dstport": "8443",
+      "proto": "tcp",
+      "service": "ssl",
+      "duration": "2.1",
+      "orig_bytes": "256",
+      "resp_bytes": "512",
+      "conn_state": "SF"
+    },
+    "decoder": { "name": "zeek-conn" }
+  },
+  {
+    "timestamp": "2026-09-28T09:24:33.000Z",
+    "rule": {
+      "id": "100526",
+      "level": 10,
+      "description": "ShadowPulse DGA: High-entropy domain with NXDOMAIN response — xk7m9p2qr5v8.evil.top from 10.0.1.50",
+      "groups": ["shadowpulse", "zeek", "dga", "dns_abuse"],
+      "mitre": { "id": ["T1568.002"], "tactic": ["Command and Control"], "technique": ["Domain Generation Algorithms"] }
+    },
+    "agent": { "id": "001", "name": "zeek-sensor-01", "ip": "10.0.0.100" },
+    "data": {
+      "srcip": "10.0.1.50",
+      "dstip": "8.8.8.8",
+      "query": "xk7m9p2qr5v8.evil.top",
+      "qtype_name": "A",
+      "rcode_name": "NXDOMAIN"
+    },
+    "decoder": { "name": "zeek-dns" }
+  },
+  {
+    "timestamp": "2026-09-28T09:26:15.000Z",
+    "rule": {
+      "id": "100530",
+      "level": 10,
+      "description": "ShadowPulse TUNNEL: Abnormally long DNS query detected — aGVsbG8gd29ybGQgZnJvbSBzaGFkb3dwdWxzZQ.tunnel.evil.com from 10.0.1.50",
+      "groups": ["shadowpulse", "zeek", "dns_tunneling"],
+      "mitre": { "id": ["T1572", "T1071.004"], "tactic": ["Command and Control"], "technique": ["Protocol Tunneling"] }
+    },
+    "agent": { "id": "001", "name": "zeek-sensor-01", "ip": "10.0.0.100" },
+    "data": {
+      "srcip": "10.0.1.50",
+      "dstip": "8.8.8.8",
+      "query": "aGVsbG8gd29ybGQgZnJvbSBzaGFkb3dwdWxzZQ.tunnel.evil.com",
+      "qtype_name": "TXT",
+      "rcode_name": "NOERROR"
+    },
+    "decoder": { "name": "zeek-dns" }
+  },
+  {
+    "timestamp": "2026-09-28T09:30:00.000Z",
+    "rule": {
+      "id": "100540",
+      "level": 14,
+      "description": "ShadowPulse MALWARE: Known malicious JA3 fingerprint detected — 72a589da586844d7f0818ce684948eea from 10.0.1.50 → 198.51.100.44:8443",
+      "groups": ["shadowpulse", "zeek", "malware", "ja3", "encrypted_threat"],
+      "mitre": { "id": ["T1573.002", "T1071.001"], "tactic": ["Command and Control"], "technique": ["Asymmetric Cryptography", "Web Protocols"] }
+    },
+    "agent": { "id": "001", "name": "zeek-sensor-01", "ip": "10.0.0.100" },
+    "data": {
+      "srcip": "10.0.1.50",
+      "dstip": "198.51.100.44",
+      "dstport": "8443",
+      "ssl_version": "TLSv12",
+      "ssl_cipher": "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+      "server_name": "update-service.com",
+      "ja3": "72a589da586844d7f0818ce684948eea",
+      "ja3s": "f4febc55ea12b31ae17cfb7e614afda8",
+      "sni_matches": "F"
+    },
+    "decoder": { "name": "zeek-ssl" }
+  },
+  {
+    "timestamp": "2026-09-28T09:35:22.000Z",
+    "rule": {
+      "id": "100550",
+      "level": 10,
+      "description": "ShadowPulse EXFIL: Large outbound transfer detected — 52428800 bytes from 10.0.1.50 → 203.0.113.66:443",
+      "groups": ["shadowpulse", "zeek", "exfiltration", "large_transfer"],
+      "mitre": { "id": ["T1048"], "tactic": ["Exfiltration"], "technique": ["Exfiltration Over Alternative Protocol"] }
+    },
+    "agent": { "id": "001", "name": "zeek-sensor-01", "ip": "10.0.0.100" },
+    "data": {
+      "srcip": "10.0.1.50",
+      "dstip": "203.0.113.66",
+      "dstport": "443",
+      "proto": "tcp",
+      "service": "ssl",
+      "duration": "45.2",
+      "orig_bytes": "52428800",
+      "resp_bytes": "4096",
+      "conn_state": "SF"
+    },
+    "decoder": { "name": "zeek-conn" }
+  },
+  {
+    "timestamp": "2026-09-28T09:38:00.000Z",
+    "rule": {
+      "id": "100572",
+      "level": 15,
+      "description": "ShadowPulse CHAIN: Malware communication + data exfiltration — 10.0.1.50 using known malicious TLS fingerprint",
+      "groups": ["shadowpulse", "zeek", "attack_chain", "malware_exfil", "critical"],
+      "mitre": { "id": ["T1573.002", "T1041"], "tactic": ["Command and Control", "Exfiltration"], "technique": ["Asymmetric Cryptography", "Exfiltration Over C2 Channel"] }
+    },
+    "agent": { "id": "001", "name": "zeek-sensor-01", "ip": "10.0.0.100" },
+    "data": {
+      "srcip": "10.0.1.50",
+      "dstip": "198.51.100.44",
+      "dstport": "8443",
+      "ja3": "72a589da586844d7f0818ce684948eea",
+      "orig_bytes": "52428800",
+      "related_alerts": ["100520", "100530", "100540", "100550"]
+    },
+    "decoder": { "name": "zeek-conn" }
+  },
+  {
+    "timestamp": "2026-09-28T09:25:00.000Z",
+    "rule": {
+      "id": "100535",
+      "level": 10,
+      "description": "ShadowPulse FLOOD: DNS Query Flood — 192.168.1.200 sent 100+ DNS queries in 60 seconds",
+      "groups": ["shadowpulse", "zeek", "dns_flood", "dos"],
+      "mitre": { "id": ["T1499"], "tactic": ["Impact"], "technique": ["Endpoint Denial of Service"] }
+    },
+    "agent": { "id": "001", "name": "zeek-sensor-01", "ip": "10.0.0.100" },
+    "data": {
+      "srcip": "192.168.1.200",
+      "dstip": "8.8.8.8",
+      "query": "rapid-flood-query.test",
+      "qtype_name": "A",
+      "rcode_name": "NOERROR"
+    },
+    "decoder": { "name": "zeek-dns" }
+  },
+  {
+    "timestamp": "2026-09-28T09:32:15.000Z",
+    "rule": {
+      "id": "100541",
+      "level": 9,
+      "description": "ShadowPulse TLS: SNI mismatch detected — Server Name cdn-images.net does not match certificate. Possible domain fronting from 10.0.2.30",
+      "groups": ["shadowpulse", "zeek", "domain_fronting", "tls_anomaly"],
+      "mitre": { "id": ["T1090.004"], "tactic": ["Command and Control"], "technique": ["Domain Fronting"] }
+    },
+    "agent": { "id": "001", "name": "zeek-sensor-01", "ip": "10.0.0.100" },
+    "data": {
+      "srcip": "10.0.2.30",
+      "dstip": "104.18.22.33",
+      "dstport": "443",
+      "ssl_version": "TLSv13",
+      "server_name": "cdn-images.net",
+      "sni_matches": "F",
+      "ssl_established": "T"
+    },
+    "decoder": { "name": "zeek-ssl" }
+  }
+]
